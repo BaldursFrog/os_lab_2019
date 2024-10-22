@@ -15,11 +15,27 @@
 #include "find_min_max.h"
 #include "utils.h"
 
+int timeout = 0; //таймаут по умолчанию
+
+
+void kill_children(pid_t *child_pids, int pnum) {
+    for (int i = 0; i < pnum; i++) {
+        if (child_pids[i] > 0) {
+            kill(child_pids[i], SIGKILL);
+        }
+    }
+}
+
+void timeout_handler(int signum) {
+    printf("Timeout reached, killing child processes...\n");
+    exit(1);
+}
+
 int main(int argc, char **argv) {
   int seed = -1;
   int array_size = -1;
   int pnum = -1;
-  bool with_files = false;
+  bool with_files = false; // определения способа обмена данными межд у процессами
 
   while (true) {
     int current_optind = optind ? optind : 1;
@@ -40,18 +56,21 @@ int main(int argc, char **argv) {
         switch (option_index) {
           case 0:
             seed = atoi(optarg);
-            // your code here
-            // error handling
+            if (seed <=0){
+              printf("Seed must be a positive integer\n");
+            }
             break;
           case 1:
             array_size = atoi(optarg);
-            // your code here
-            // error handling
+            if(array_size <= 0){
+              printf("Array size must be a positive integer\n");
+            }
             break;
           case 2:
             pnum = atoi(optarg);
-            // your code here
-            // error handling
+            if(pnum <= 0){
+              printf("Number of processes must be a positive integer\n");
+            }
             break;
           case 3:
             with_files = true;
@@ -82,14 +101,28 @@ int main(int argc, char **argv) {
     printf("Usage: %s --seed \"num\" --array_size \"num\" --pnum \"num\" \n",
            argv[0]);
     return 1;
-  }
+  }// Проверяет, были ли переданы все обязательные опции
 
   int *array = malloc(sizeof(int) * array_size);
   GenerateArray(array, array_size, seed);
   int active_child_processes = 0;
 
   struct timeval start_time;
-  gettimeofday(&start_time, NULL);
+  gettimeofday(&start_time, NULL); //Получает текущее время и сохраняет его в структуру start_time, которая используется для измерения времени выполнения программы.
+
+
+  int pipefd[2 * pnum]; // Объявляет массив pipefd для хранения дескрипторов каналов (pipes) которые будут использоваться  для обмена данными между процессами. Размер массива равен 2 * pnum, так как для каждого процесса нужно два дескриптора: один для чтения и один для записи.
+
+  if (!with_files){
+    for(int i = 0; i < pnum; i++){
+      if (pipe(pipefd + i*2) < 0){
+        perror("pipe");
+        return 1;
+      }
+    }
+  } // Создаем каналы для обмена если нет флага 
+
+  pid_t child_pids[pnum]; // массив для хранения pid дочерних процессов 
 
   for (int i = 0; i < pnum; i++) {
     pid_t child_pid = fork();
@@ -98,15 +131,30 @@ int main(int argc, char **argv) {
       active_child_processes += 1;
       if (child_pid == 0) {
         // child process
-
-        // parallel somehow
+        int chunk_size = array_size / pnum; //Вычисляет размер части массива, которую будет обрабатывать текущий дочерний процесс.
+        int start_index = i * chunk_size; // Вычисляет начальный индекс части массива, которую будет обрабатывать текущий дочерний процесс
+        int end_index = (i == pnum - 1) ? array_size : start_index + chunk_size; // Вычисляет конечный индекс части массива. Если текущий процесс последний, конечный индекс равен размеру массива, иначе он равен start_index + chunk_size.
+        
+        struct MinMax min_max = GetMinMax(array, start_index, end_index);
 
         if (with_files) {
           // use files here
+          char filename[256];
+          sprintf(filename, "result_%d.txt", i);
+          FILE *file = fopen(filename, "w");
+          fprintf(file, "%d %d\n", min_max.min, min_max.max); //Записывает минимальное и максимальное значения в файл
+          fclose(file);
         } else {
           // use pipe here
+          close(pipefd[i*2]); // закрыть канал для чтения
+          write(pipefd[i*2 + 1], &min_max, sizeof(struct MinMax)); //Записывает результаты в канал для записи.
+          close(pipefd[i*2 + 1]); // закрыть канал для записи
         }
-        return 0;
+
+        free(array);
+        exit(0);
+      } else{
+        child_pids[i]= child_pid;                                                                                             // Если child_pid не равно 0, это означает, что текущий код выполняется в родительском процессе.
       }
 
     } else {
@@ -116,9 +164,15 @@ int main(int argc, char **argv) {
   }
 
   while (active_child_processes > 0) {
-    // your code here
+    int status;
+    pid_t pid = wait(&status);
+    if (pid > 0){
+      active_child_processes -= 1;
+    }
+  } // Ожидает завершения всех дочерних процессов. Каждый раз, когда дочерний процесс завершается, уменьшает счетчик активных дочерних процессов (active_child_processes) на 1.
 
-    active_child_processes -= 1;
+  if (timeout > 0){
+    ualarm(0, 0); // отключаем таймер, если все дочерние процессы завершились до истечения таймаута
   }
 
   struct MinMax min_max;
@@ -131,13 +185,28 @@ int main(int argc, char **argv) {
 
     if (with_files) {
       // read from files
+      char filename[256];
+      sprintf(filename, "result_%d.txt", i);
+      FILE *file = fopen(filename, "r");
+      int min, max;
+      fscanf(file, "%d %d", &min, &max);
+      fclose(file);
+
+      if (min < min_max.min) min_max.min = min;
+      if (max > min_max.max) min_max.max = max;
     } else {
       // read from pipes
-    }
+      struct MinMax child_min_max;
+      close(pipefd[i*2 +1]); // закрыть канал для записи
+      read(pipefd[i*2], &child_min_max, sizeof(struct MinMax));
+      close(pipefd[i*2]); //закрыть канал для чтения
 
-    if (min < min_max.min) min_max.min = min;
-    if (max > min_max.max) min_max.max = max;
-  }
+      if (min < min_max.min) min_max.min = min;
+      if (max > min_max.max) min_max.max = max;
+    }
+  }  // Собирает результаты работы дочерних процессов. Если with_files равно true, считывает
+     // результаты из файлов. Если with_files равно false, считывает результаты из каналов. Обновляет 
+     // глобальные переменные min_max с учетом полученных результатов.
 
   struct timeval finish_time;
   gettimeofday(&finish_time, NULL);
