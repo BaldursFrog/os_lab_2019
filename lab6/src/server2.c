@@ -22,7 +22,7 @@ struct FactorialArgs {
     uint64_t mod;
 };
 
-uint64_t Factorial(uint64_t begin, uint64_t end, uint64_t mod) {
+uint64_t Factorial(uint64_t begin, uint64_t end, uint64_t mod) { // Функция, которая вычисляет факториал в заданном диапазоне [begin, end] по модулю mod.
     uint64_t ans = 1;
     for (uint64_t i = begin; i <= end; ++i) {
         ans = MultModulo(ans, i, mod);
@@ -31,7 +31,7 @@ uint64_t Factorial(uint64_t begin, uint64_t end, uint64_t mod) {
     return ans;
 }
 
-void* ThreadFactorial(void* args) {
+void* ThreadFactorial(void* args) { // Функция, которая выполняется в отдельном потоке. Она принимает аргументы для вычисления факториала, вызывает функцию Factorial и возвращает результат
     struct FactorialArgs* fargs = (struct FactorialArgs*)args;
     printf("ThreadFactorial: begin = %lu, end = %lu, mod = %lu\n", fargs->begin, fargs->end, fargs->mod); // Отладочное сообщение
     uint64_t result = Factorial(fargs->begin, fargs->end, fargs->mod);
@@ -116,23 +116,23 @@ int main(int argc, char **argv) {
     }
 
     // Настройка структуры адреса сервера
-    struct sockaddr_in server;
+    struct sockaddr_in server; // Структура, которая содержит информацию об адресе сервера.
     server.sin_family = AF_INET; //Семейство адресов для работы с IP-адресами версии 4 (IPv4)
-    server.sin_port = htons((uint16_t)port);
+    server.sin_port = htons((uint16_t)port); // htons и htonl: Функции для преобразования значений в сетевой порядок байтов.
     server.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // Настройка опции SO_REUSEADDR для сокета (повторно использовать адрес и порт после закрытия сокета)
     int opt_val = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val));
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val));  //  опцию SO_REUSEADDR, чтобы сокет мог быть повторно использован после закрытия.
 
     // Привязка сокета к адресу и начало прослушивания соединений
-    int err = bind(server_fd, (struct sockaddr *)&server, sizeof(server));
+    int err = bind(server_fd, (struct sockaddr *)&server, sizeof(server)); // Привязывает сокет к адресу и порту.
     if (err < 0) {
         fprintf(stderr, "Can not bind to socket: %s\n", strerror(errno));
         return 1;
     }
 
-    err = listen(server_fd, 128);
+    err = listen(server_fd, 128); // Начинает прослушивание входящих соединений.
     if (err < 0) {
         fprintf(stderr, "Could not listen on socket: %s\n", strerror(errno));
         return 1;
@@ -140,10 +140,13 @@ int main(int argc, char **argv) {
 
     printf("Server listening at %d\n", port); // Сервер запущен и слушает
 
+
+// Обработка входящих соединений
+c
     while (true) {
         struct sockaddr_in client;
         socklen_t client_len = sizeof(client);
-        int client_fd = accept(server_fd, (struct sockaddr *)&client, &client_len);
+        int client_fd = accept(server_fd, (struct sockaddr *)&client, &client_len); //  Принимает входящее соединение от клиента.
 
         // Установление соединения с клиентом
         if (client_fd < 0) {
@@ -173,7 +176,7 @@ int main(int argc, char **argv) {
             uint64_t begin = 0;
             uint64_t end = 0;
             uint64_t mod = 0;
-            memcpy(&begin, from_client, sizeof(uint64_t));
+            memcpy(&begin, from_client, sizeof(uint64_t)); // Копирует данные из буфера в переменные begin, end и mod.
             memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
             memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
 
@@ -206,7 +209,8 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "Error joining thread %d\n", i);
                     return 1;
                 }
-                total = MultModulo(total, results[i], mod);
+                total = MultModulo(total, results[i], mod); // Объединяет результаты от всех потоков.
+
             }
 
             printf("Total: %lu\n", total); // Вывод общего результата
@@ -215,7 +219,7 @@ int main(int argc, char **argv) {
             memcpy(buffer, &total, sizeof(total));
 
             // Отправка результата клиенту
-            err = send(client_fd, buffer, sizeof(total), 0);
+            err = send(client_fd, buffer, sizeof(total), 0); // Отправляет результат клиенту.
             if (err < 0) {
                 fprintf(stderr, "Can't send data to client: %s\n", strerror(errno));
                 break;

@@ -220,10 +220,11 @@ int main(int argc, char **argv) {
     
     for (int i = 0; i < servers_num; i++) {
         {
-            args[i].server_args = to[i];
-            args[i].mod = mod;
-            args[i].begin = 1 + i * step;
-            if (i == servers_num - 1) {
+            args[i].server_args = to[i]; // Эта строка кода присваивает информацию о сервере (IP и порт) из массива to в соответствующий элемент массива args.
+            args[i].mod = mod; // Эта строка кода присваивает значение модуля всем потокам.
+            args[i].begin = 1 + i * step; // Эта строка кода вычисляет начальное значение для каждого сервера.
+            
+            if (i == servers_num - 1) { // Этот блок кода вычисляет конечное значение для каждого сервера:
                 args[i].end = k;
             } else {
                 args[i].end = args[i].begin + step - 1;

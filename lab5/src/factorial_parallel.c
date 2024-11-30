@@ -54,22 +54,26 @@ int main(int argc, char* argv[]) {
     pthread_t threads[pnum];
     ThreadData thread_data[pnum];
 
-    int chunk_size = k / pnum;
-    int remainder = k % pnum;
+    int chunk_size = k / pnum; // Размер части факториала, которую будет вычислять каждый поток
+    int remainder = k % pnum; // Этот остаток добавляется к последнему потоку, чтобы учесть неравномерное деление.
 
     for (int i = 0; i < pnum; i++) {
-        thread_data[i].start = i * chunk_size + 1;
-        thread_data[i].end = (i + 1) * chunk_size;
-        thread_data[i].mod = mod;
+        thread_data[i].start = i * chunk_size + 1; // начало диапазора вычесления факториала в потоке
+        thread_data[i].end = (i + 1) * chunk_size; // конец
+        thread_data[i].mod = mod; // Модуль, по которому будет вычисляться факториал
 
-        if (i == pnum - 1) {
+        if (i == pnum - 1) { // remainder: Остаток от деления k на pnum. Этот остаток добавляется к последнему потоку, чтобы учесть неравномерное деление.
             thread_data[i].end += remainder;
         }
 
-        pthread_create(&threads[i], NULL, factorial_thread, &thread_data[i]);
+        pthread_create(&threads[i], NULL, factorial_thread, &thread_data[i]); // создает потоки для параллельного вычисления факториала.
     }
-
-    for (int i = 0; i < pnum; i++) {
+    // &threads[i]: Указатель на переменную типа pthread_t, которая будет хранить идентификатор созданного потока
+    // NULL: Указатель на структуру pthread_attr_t, которая определяет атрибуты потока. В данном случае NULL означает использование атрибутов по умолчанию.
+    // factorial_thread: Указатель на функцию, которую будет выполнять поток. В данном случае это функция factorial_thread, которая вычисляет часть факториала.
+    // &thread_data[i]: Указатель на аргумент, который будет передан функции потока. В данном случае это указатель на структуру ThreadData, содержащую информацию о том, какую часть факториала должен вычислять поток.
+    
+    for (int i = 0; i < pnum; i++) { // 
         pthread_join(threads[i], NULL);
     }
 
